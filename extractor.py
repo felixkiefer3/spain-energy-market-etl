@@ -2,6 +2,7 @@ import os
 import requests
 import pandas as pd
 from dotenv import load_dotenv
+import sqlite3
 
 load_dotenv()
 
@@ -32,13 +33,40 @@ def extract_indicator_data(indicator_id: str, start_date: str, end_date: str) ->
     df = pd.DataFrame(values)
     return df
 
+def transform_data(df: pd.DataFrame) -> pd.DataFrame:
+    """Cleans and formats the raw DataFrame."""
+    # Keep only relevant columns
+    df_clean = df[['value', 'datetime']].copy()
+    
+    # Rename to SQL standards (snake_case)
+    df_clean = df_clean.rename(columns={'value': 'price_eur_mwh', 'datetime': 'timestamp'})
+    
+    # Convert string to standard datetime object (UTC)
+    df_clean['timestamp'] = pd.to_datetime(df_clean['timestamp'], utc=True)
+    
+    return df_clean
+
+def load_data(df: pd.DataFrame, db_name: str = 'energy_data.db'):
+    """Loads the DataFrame into a local SQLite database."""
+    # Create connection to the local database file
+    conn = sqlite3.connect(db_name)
+    
+    # Insert data into a table named 'wholesale_price'
+    df.to_sql('wholesale_price', conn, if_exists='replace', index=False)
+    
+    conn.close()
+
 if __name__ == "__main__":
-    # Define time range
     start = '2026-10-01T00:00:00'
     end = '2026-10-02T00:00:00'
     
-    print("Extracting wholesale electricity price (ID 600)...")
-    df_price = extract_indicator_data('600', start, end)
+    print("Extracting wholesale electricity price...")
+    df_raw = extract_indicator_data('600', start, end)
     
-    # Display the first 5 rows of the extracted tabular data
-    print(df_price[['value', 'datetime']].head())
+    print("Transforming data...")
+    df_clean = transform_data(df_raw)
+    
+    print("Loading data into database...")
+    load_data(df_clean)
+    
+    print("Pipeline execution completed successfully!")

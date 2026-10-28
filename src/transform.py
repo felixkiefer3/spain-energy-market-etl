@@ -2,6 +2,15 @@ import pandas as pd
 import pandera.pandas as pa
 
 def transform_price_data(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Cleans and standardizes raw price data.
+    
+    Args:
+        df (pd.DataFrame): Raw price dataframe from the API.
+        
+    Returns:
+        pd.DataFrame: Cleaned dataframe with standardized columns and UTC timestamps.
+    """
     df = df.drop_duplicates(subset=['datetime']).copy()
     df_clean = df[['value', 'datetime']].copy()
     df_clean = df_clean.rename(columns={'value': 'price_eur_mwh', 'datetime': 'timestamp'})
@@ -9,14 +18,35 @@ def transform_price_data(df: pd.DataFrame) -> pd.DataFrame:
     return df_clean
 
 def transform_generation_data(df: pd.DataFrame) -> pd.DataFrame:
-    df = df[df['geo_id'] == 8741].copy()
+    """
+    Cleans raw generation data (already pre-filtered by geographic region at extraction).
+    
+    Args:
+        df (pd.DataFrame): Raw generation dataframe from the API.
+        
+    Returns:
+        pd.DataFrame: Cleaned dataframe with standardized columns and UTC timestamps.
+    """
     df_clean = df[['value', 'datetime_utc', 'technology']].copy()
     df_clean = df_clean.rename(columns={'value': 'generation_mwh', 'datetime_utc': 'timestamp'})
     df_clean['timestamp'] = pd.to_datetime(df_clean['timestamp'], utc=True)
     return df_clean
 
-def handle_anomalies(df: pd.DataFrame, col: str = 'price_eur_mwh', threshold: float = 3.0) -> pd.DataFrame:
-    """Detects and interpolates anomalous spikes using Z-score."""
+def handle_anomalies(df: pd.DataFrame, col: str = 'price_eur_mwh', threshold: float = 6.0) -> pd.DataFrame:
+    """
+    Detects and resolves anomalous data spikes using the Z-score method.
+    
+    Identifies values deviating from the mean by more than the specified threshold
+    and replaces them using linear interpolation.
+    
+    Args:
+        df (pd.DataFrame): The dataframe containing the target column.
+        col (str): The column name to check for anomalies.
+        threshold (float): The Z-score threshold for outlier detection.
+        
+    Returns:
+        pd.DataFrame: The dataframe with interpolated outliers.
+    """
     mean_val = df[col].mean()
     std_val = df[col].std()
     
@@ -31,6 +61,16 @@ def handle_anomalies(df: pd.DataFrame, col: str = 'price_eur_mwh', threshold: fl
     return df
 
 def create_master_table(df_price: pd.DataFrame, df_gen: pd.DataFrame) -> pd.DataFrame:
+    """
+    Merges price and generation data, applies anomaly detection, and validates bounds.
+    
+    Args:
+        df_price (pd.DataFrame): Cleaned price data.
+        df_gen (pd.DataFrame): Cleaned generation data.
+        
+    Returns:
+        pd.DataFrame: The unified and validated master dataframe ready for database loading.
+    """
     df_gen_pivot = df_gen.pivot(index='timestamp', columns='technology', values='generation_mwh').reset_index()
     df_gen_pivot.columns.name = None 
     
@@ -42,9 +82,17 @@ def create_master_table(df_price: pd.DataFrame, df_gen: pd.DataFrame) -> pd.Data
     
     df_master = handle_anomalies(df_master)
     
-    schema = pa.DataFrameSchema({
+    # Define baseline schema with OMIE market limits (-500 EUR/MWh floor)
+    schema_dict = {
         "timestamp": pa.Column(pd.DatetimeTZDtype(tz="UTC"), nullable=False, coerce=True),
-        "price_eur_mwh": pa.Column(float, nullable=False)
-    })
+        "price_eur_mwh": pa.Column(float, checks=pa.Check.ge(-500.0), nullable=False)
+    }
+    
+    # Dynamically enforce physical limits (>= 0 MWh) on all generation columns
+    for tech in df_gen['technology'].unique():
+        if tech in df_master.columns:
+            schema_dict[tech] = pa.Column(float, checks=pa.Check.ge(0.0), nullable=True)
+            
+    schema = pa.DataFrameSchema(schema_dict)
     
     return schema.validate(df_master)

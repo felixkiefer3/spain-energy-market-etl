@@ -50,9 +50,11 @@ async def extract_all_data(price_id: str, tech_ids: dict, start: str, end: str) 
         tuple: A tuple containing (df_price, df_gen_combined) dataframes.
     """
     async with aiohttp.ClientSession() as session:
-        price_task = asyncio.create_task(fetch_indicator(session, price_id, start, end))
+        # CAMBIO CLAVE AQUÍ: Pasamos explícitamente geo_id="3" (Nacional) para el precio
+        price_task = asyncio.create_task(fetch_indicator(session, price_id, start, end, geo_id="3"))
         
         gen_tasks = {
+            # La generación usará el valor por defecto "8741" (Península) que definiste en fetch_indicator
             tech: asyncio.create_task(fetch_indicator(session, ind_id, start, end))
             for tech, ind_id in tech_ids.items()
         }

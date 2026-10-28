@@ -1,6 +1,8 @@
 import pandas as pd
 import pandera.pandas as pa
 
+from src.config import TECH_IDS
+
 def transform_price_data(df: pd.DataFrame) -> pd.DataFrame:
     """
     Cleans and standardizes raw price data.
@@ -62,17 +64,15 @@ def handle_anomalies(df: pd.DataFrame, col: str = 'price_eur_mwh', threshold: fl
 
 def create_master_table(df_price: pd.DataFrame, df_gen: pd.DataFrame) -> pd.DataFrame:
     """
-    Merges price and generation data, applies anomaly detection, and validates bounds.
-    
-    Args:
-        df_price (pd.DataFrame): Cleaned price data.
-        df_gen (pd.DataFrame): Cleaned generation data.
-        
-    Returns:
-        pd.DataFrame: The unified and validated master dataframe ready for database loading.
+    Merges price and generation data, enforces schema completeness, 
+    applies anomaly detection, and validates bounds.
     """
     df_gen_pivot = df_gen.pivot(index='timestamp', columns='technology', values='generation_mwh').reset_index()
     df_gen_pivot.columns.name = None 
+    
+    for tech in TECH_IDS.keys():
+        if tech not in df_gen_pivot.columns:
+            df_gen_pivot[tech] = float('nan')
     
     df_master = pd.merge(df_price, df_gen_pivot, on='timestamp', how='outer')
     df_master = df_master.sort_values('timestamp').reset_index(drop=True)
@@ -82,15 +82,16 @@ def create_master_table(df_price: pd.DataFrame, df_gen: pd.DataFrame) -> pd.Data
     
     df_master = handle_anomalies(df_master)
     
-    # Define baseline schema with OMIE market limits (-500 EUR/MWh floor)
     schema_dict = {
         "timestamp": pa.Column(pd.DatetimeTZDtype(tz="UTC"), nullable=False, coerce=True),
         "price_eur_mwh": pa.Column(float, checks=pa.Check.ge(-500.0), nullable=False)
     }
     
-    # Dynamically enforce physical limits (>= 0 MWh) on all generation columns
-    for tech in df_gen['technology'].unique():
-        if tech in df_master.columns:
+    # Dynamically enforce physical limits based on technology type
+    for tech in TECH_IDS.keys():
+        if tech == 'hydro':
+            schema_dict[tech] = pa.Column(float, nullable=True)
+        else:
             schema_dict[tech] = pa.Column(float, checks=pa.Check.ge(0.0), nullable=True)
             
     schema = pa.DataFrameSchema(schema_dict)

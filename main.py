@@ -19,32 +19,44 @@ async def main():
     environment variables. Extracts data asynchronously, transforms it 
     applying business rules, and loads it into the database.
     """
-    last_date = get_last_timestamp('energy_master')
-    
-    if last_date:
-        start = (pd.to_datetime(last_date) + pd.Timedelta(minutes=5)).strftime('%Y-%m-%dT%H:%M:%S')
-        logger.info(f"Incremental load starting from {start}")
-    else:
-        start = os.getenv('INITIAL_START_DATE', '2026-01-01T00:00:00')
-        logger.info(f"Initial full load starting from {start}")
+    try:
+        last_date = get_last_timestamp('energy_master')
 
-    end = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S')
-    
-    logger.info("Extracting all data asynchronously...")
-    df_price_raw, df_gen_raw = await extract_all_data('600', TECH_IDS, start, end)
-    
-    if df_price_raw.empty or df_gen_raw.empty:
-        logger.warning("No new data available.")
-        return
+        if last_date:
+            start_api = (pd.to_datetime(last_date) - pd.Timedelta(hours=1)).strftime('%Y-%m-%dT%H:%M:%SZ')
+            logger.info(f"Incremental load. Fetching API context from {start_api}")
+        else:
+            start_api = os.getenv('INITIAL_START_DATE', '2026-01-01T00:00:00Z')
+            logger.info(f"Initial full load starting from {start_api}")
 
-    logger.info("Transforming data...")
-    df_price_clean = transform_price_data(df_price_raw)
-    df_gen_clean = transform_generation_data(df_gen_raw)
-    df_master = create_master_table(df_price_clean, df_gen_clean)
+        end = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+            
+        logger.info("Extracting all data asynchronously...")
+        df_price_raw, df_gen_raw = await extract_all_data('600', TECH_IDS, start_api, end)
+
+        if df_price_raw.empty or df_gen_raw.empty:
+            logger.warning(f"Missing data. Prices empty: {df_price_raw.empty} | Gen empty: {df_gen_raw.empty}")
+            return
     
-    logger.info("Loading master data into database...")
-    load_data(df_master, 'energy_master')
-    logger.info("Pipeline execution completed successfully!")
+        logger.info("Transforming data...")
+        df_price_clean = transform_price_data(df_price_raw)
+        df_gen_clean = transform_generation_data(df_gen_raw)
+        df_master = create_master_table(df_price_clean, df_gen_clean)
+        
+        if last_date:
+            df_master = df_master[df_master['timestamp'] > pd.to_datetime(last_date)]
+            
+        if df_master.empty:
+            logger.info("No new rows to insert after applying overlap filter.")
+            return
+            
+        logger.info("Loading master data into database...")
+        load_data(df_master, 'energy_master')
+        logger.info(f"Pipeline execution completed successfully! {len(df_master)} rows inserted.")
+        
+    except Exception as e:
+        logger.exception("Fatal error occurred during pipeline execution.")
+        raise
 
 if __name__ == "__main__":
     asyncio.run(main())

@@ -1,3 +1,4 @@
+import os
 import asyncio
 import pandas as pd
 from datetime import datetime, timezone
@@ -10,14 +11,22 @@ from src.logger import setup_logger
 logger = setup_logger()
 
 async def main():
+    """
+    Orchestrates the ETL pipeline execution.
+    
+    Implements incremental loading by checking the last database timestamp. 
+    If no history exists, it defaults to an initial start date defined in 
+    environment variables. Extracts data asynchronously, transforms it 
+    applying business rules, and loads it into the database.
+    """
     last_date = get_last_timestamp('energy_master')
     
     if last_date:
         start = (pd.to_datetime(last_date) + pd.Timedelta(minutes=5)).strftime('%Y-%m-%dT%H:%M:%S')
         logger.info(f"Incremental load starting from {start}")
     else:
-        start = '2026-10-01T00:00:00'
-        logger.info("Initial full load")
+        start = os.getenv('INITIAL_START_DATE', '2026-01-01T00:00:00')
+        logger.info(f"Initial full load starting from {start}")
 
     end = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S')
     

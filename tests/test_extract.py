@@ -5,6 +5,13 @@ from src.extract import fetch_indicator
 
 @pytest.mark.asyncio
 async def test_fetch_indicator_returns_dataframe():
+    """
+    Tests the asynchronous data extraction function by mocking the HTTP session.
+    
+    Verifies that the function correctly parses a simulated JSON response from 
+    the API and returns a properly structured pandas DataFrame, without making 
+    actual network requests.
+    """
     mock_session = MagicMock()
     mock_response = AsyncMock()
     
@@ -15,6 +22,7 @@ async def test_fetch_indicator_returns_dataframe():
     }
     mock_response.raise_for_status = MagicMock()
     
+    # Simulate entering the 'async with' context manager
     mock_session.get.return_value.__aenter__.return_value = mock_response
 
     df = await fetch_indicator(mock_session, '600', '2026-10-01', '2026-10-02')

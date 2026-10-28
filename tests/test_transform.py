@@ -3,6 +3,13 @@ import pytest
 from src.transform import handle_anomalies
 
 def test_handle_anomalies_removes_outliers():
+    """
+    Tests the anomaly detection and linear interpolation logic.
+    
+    Verifies that a synthetic extreme outlier is correctly identified, 
+    removed, and replaced with an accurate linearly interpolated value 
+    without leaving any nulls in the dataset.
+    """
     data = {'price_eur_mwh': [50.0, 52.0, 51.0, 50.5, 51.5, 49.5, 50.0, 51.0, 52.0, 999.0, 50.5, 51.5]}
     df = pd.DataFrame(data)
     

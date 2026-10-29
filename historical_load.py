@@ -26,8 +26,9 @@ async def load_historical_data(start_date: str, end_date: str):
     # 1. Resume Capability: Check DB and override start_date if history exists
     last_date = get_last_timestamp('energy_master')
     if last_date:
-        next_start = pd.to_datetime(last_date) + pd.Timedelta(hours=1)
-        if next_start > pd.to_datetime(start_date):
+        next_start = pd.to_datetime(last_date, utc=True) + pd.Timedelta(hours=1)
+        requested_start_ts = pd.to_datetime(start_date, utc=True)
+        if next_start > requested_start_ts:
             logger.info(f"Database checkpoint found ({last_date}). Fast-forwarding start date.")
             start_date = next_start.strftime('%Y-%m-%dT%H:%M:%S')
 

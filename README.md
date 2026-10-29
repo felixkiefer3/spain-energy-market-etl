@@ -49,23 +49,28 @@ You can run this project using Docker (recommended for a quick start without loc
 4. **Run the Application:**
    Keep the SQLite database synced with your local filesystem via volume mapping. Use `${PWD}` for Windows PowerShell or `$(pwd)` for Linux/macOS Bash.
 
+   - **Historical Backfill (Run once to initialize DB):**
+     ```bash
+     # Windows
+     docker run --env-file .env -v ${PWD}:/app spain-energy-market-etl python historical_load.py --start 2024-01-01 --end 2026-10-01
+     # Linux/macOS
+     docker run --env-file .env -v $(pwd):/app spain-energy-market-etl python historical_load.py --start 2024-01-01 --end 2026-10-01
+     ```
+
    - **Incremental ETL Load:**
      ```bash
-     # Windows (PowerShell)
+     # Windows
      docker run --env-file .env -v ${PWD}:/app spain-energy-market-etl python main.py
-     
-     # Linux/macOS (Bash)
+     # Linux/macOS
      docker run --env-file .env -v $(pwd):/app spain-energy-market-etl python main.py
      ```
    
    - **Launch Dashboard (Accessible at http://localhost:8501):**
      ```bash
-     # Windows (PowerShell)
+     # Windows
      docker run -p 8501:8501 --env-file .env -v ${PWD}:/app spain-energy-market-etl streamlit run dashboard.py
-     
-     # Linux/macOS (Bash)
+     # Linux/macOS
      docker run -p 8501:8501 --env-file .env -v $(pwd):/app spain-energy-market-etl streamlit run dashboard.py
-     ```
 
 ---
 

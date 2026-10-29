@@ -1,0 +1,1 @@
+schtasks /create /tn "Spain_Energy_Market_ETL" /tr "%~dp0.venv\Scripts\python.exe %~dp0main.py" /sc minute /mo 15
